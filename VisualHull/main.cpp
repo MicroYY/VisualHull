@@ -10,6 +10,7 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Eigen>
 #include <limits>
+#include <cmath>   //假装更改 //再改一下
 
 // 用于判断投影是否在visual hull内部
 struct Projection
