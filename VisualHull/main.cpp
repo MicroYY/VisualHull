@@ -32,9 +32,9 @@ struct Projection
 		int indY = vec3[0] / vec3[2];    //齐次坐标三维转二维
 
 		if (outOfRange(indX, m_image.size().height) || outOfRange(indY, m_image.size().width))
-			return false;       //判断点有没有在轮廓(Silhouette)内部
+			return false;       //判断点有没有在轮廓(Silhouette)内部，但这只相当于轮廓是矩形啊
 		return m_image.at<uchar>((uint)(vec3[1] / vec3[2]), (uint)(vec3[0] / vec3[2])) > m_threshold;
-	}
+	}    //这个阈值我不知道是做什么用的
 };
 
 // 用于index和实际坐标之间的转换
@@ -46,7 +46,7 @@ struct CoordinateInfo
 
 	double index2coor(int index)
 	{
-		return m_min + index * (m_max - m_min) / m_resolution;
+		return m_min + index * (m_max - m_min) / m_resolution;   //不懂这个公式的原理
 	}
 
 	CoordinateInfo(int resolution = 10, double min = 0.0, double max = 100.0)
@@ -60,13 +60,13 @@ struct CoordinateInfo
 class Model
 {
 public:
-	typedef std::vector<std::vector<bool>> Pixel;
-	typedef std::vector<Pixel> Voxel;
+	typedef std::vector<std::vector<bool>> Pixel;    //二维像素用一个二维矩阵表示?里面还全是0,1
+	typedef std::vector<Pixel> Voxel;				 //体素
 
 	Model(int resX = 100, int resY = 100, int resZ = 100);
 	~Model();
 
-	void saveModel(const char* pFileName);
+	void saveModel(const char* pFileName);    //这个不用动
 	void saveModelWithNormal(const char* pFileName);
 	void loadMatrix(const char* pFileName);
 	void loadImage(const char* pDir, const char* pPrefix, const char* pSuffix);
@@ -97,6 +97,7 @@ Model::Model(int resX, int resY, int resZ)
 	else
 		m_neiborSize = 1;
 	m_voxel = Voxel(m_corrX.m_resolution, Pixel(m_corrY.m_resolution, std::vector<bool>(m_corrZ.m_resolution, true)));
+	//不是很懂这个体素的生成方式
 	m_surface = m_voxel;
 }
 
@@ -104,7 +105,7 @@ Model::~Model()
 {
 }
 
-void Model::saveModel(const char* pFileName)
+void Model::saveModel(const char* pFileName)     
 {
 	std::ofstream fout(pFileName);
 
@@ -113,7 +114,7 @@ void Model::saveModel(const char* pFileName)
 			for (int indexZ = 0; indexZ < m_corrZ.m_resolution; indexZ++)
 				if (m_surface[indexX][indexY][indexZ])
 				{
-					double coorX = m_corrX.index2coor(indexX);
+					double coorX = m_corrX.index2coor(indexX);//转换成空间实际坐标
 					double coorY = m_corrY.index2coor(indexY);
 					double coorZ = m_corrZ.index2coor(indexZ);
 					fout << coorX << ' ' << coorY << ' ' << coorZ << std::endl;
@@ -124,7 +125,7 @@ void Model::saveModelWithNormal(const char* pFileName)
 {
 	std::ofstream fout(pFileName);
 
-	double midX = m_corrX.index2coor(m_corrX.m_resolution / 2);
+	double midX = m_corrX.index2coor(m_corrX.m_resolution / 2);   //这3个貌似没有用上  
 	double midY = m_corrY.index2coor(m_corrY.m_resolution / 2);
 	double midZ = m_corrZ.index2coor(m_corrZ.m_resolution / 2);
 
@@ -138,12 +139,13 @@ void Model::saveModelWithNormal(const char* pFileName)
 					double coorZ = m_corrZ.index2coor(indexZ);
 					fout << coorX << ' ' << coorY << ' ' << coorZ << ' ';
 
-					Eigen::Vector3f nor = getNormal(indexX, indexY, indexZ);
+					Eigen::Vector3f nor = getNormal(indexX, indexY, indexZ); //只根据一个点的坐标如何求法向量？纳闷
 					fout << nor(0) << ' ' << nor(1) << ' ' << nor(2) << std::endl;
 				}
 }
 
-void Model::loadMatrix(const char* pFileName)
+// 读取相机的内外参数，不用管
+void Model::loadMatrix(const char* pFileName)  
 {
 	std::ifstream fin(pFileName);
 
@@ -167,8 +169,9 @@ void Model::loadMatrix(const char* pFileName)
 		projection.m_projMat = matInt * matExt;
 		m_projectionList.push_back(projection);
 	}
-}
+}   
 
+       // 读取投影图片，不用动     文件名               前缀                 后缀
 void Model::loadImage(const char* pDir, const char* pPrefix, const char* pSuffix)
 {
 	int fileCount = m_projectionList.size();
@@ -182,6 +185,7 @@ void Model::loadImage(const char* pDir, const char* pPrefix, const char* pSuffix
 	}
 }
 
+//		  得到Voxel模型
 void Model::getModel()
 {
 	int prejectionCount = m_projectionList.size();
@@ -193,7 +197,7 @@ void Model::getModel()
 				{
 					double coorX = m_corrX.index2coor(indexX);
 					double coorY = m_corrY.index2coor(indexY);
-					double coorZ = m_corrZ.index2coor(indexZ);
+					double coorZ = m_corrZ.index2coor(indexZ);    //相当于空间里一个立方体
 					m_voxel[indexX][indexY][indexZ] = m_voxel[indexX][indexY][indexZ] && m_projectionList[i].checkRange(coorX, coorY, coorZ);
 				}
 }
@@ -234,14 +238,14 @@ void Model::getSurface()
 
 Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 {
-	auto outOfRange = [&](int indexX, int indexY, int indexZ){
+	auto outOfRange = [&](int indexX, int indexY, int indexZ){   //判断是否超出分辨率？？
 		return indexX < 0 || indexY < 0 || indexZ < 0
 			|| indexX >= m_corrX.m_resolution
 			|| indexY >= m_corrY.m_resolution
 			|| indexZ >= m_corrZ.m_resolution;
 	};
 
-	std::vector<Eigen::Vector3f> neiborList;
+	std::vector<Eigen::Vector3f> neiborList;    
 	std::vector<Eigen::Vector3f> innerList;
 
 	for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
@@ -257,11 +261,11 @@ Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 				{
 					float coorX = m_corrX.index2coor(neiborX);
 					float coorY = m_corrY.index2coor(neiborY);
-					float coorZ = m_corrZ.index2coor(neiborZ);
+					float coorZ = m_corrZ.index2coor(neiborZ);   
 					if (m_surface[neiborX][neiborY][neiborZ])
-						neiborList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));
+						neiborList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));  //在面上就放到面的vector里面
 					else if (m_voxel[neiborX][neiborY][neiborZ])
-						innerList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));
+						innerList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));   //在体里就放到体的vector里面
 				}
 			}
 
@@ -269,15 +273,15 @@ Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 
 	Eigen::MatrixXf matA(3, neiborList.size());
 	for (int i = 0; i < neiborList.size(); i++)
-		matA.col(i) = neiborList[i] - point;
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigenSolver(matA * matA.transpose());
-	Eigen::Vector3f eigenValues = eigenSolver.eigenvalues();
+		matA.col(i) = neiborList[i] - point;    //差向量
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigenSolver(matA * matA.transpose());//矩阵乘以它的转置
+	Eigen::Vector3f eigenValues = eigenSolver.eigenvalues();  //求了行列式的值？为什么是三维的？
 	int indexEigen = 0;
 	if (abs(eigenValues[1]) < abs(eigenValues[indexEigen]))
 		indexEigen = 1;
 	if (abs(eigenValues[2]) < abs(eigenValues[indexEigen]))
 		indexEigen = 2;
-	Eigen::Vector3f normalVector = eigenSolver.eigenvectors().col(indexEigen);
+	Eigen::Vector3f normalVector = eigenSolver.eigenvectors().col(indexEigen);   //这个怎么得到的法向量?
 	
 	Eigen::Vector3f innerCenter = Eigen::Vector3f::Zero();
 	for (auto const& vec : innerList)
@@ -285,7 +289,7 @@ Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 	innerCenter /= innerList.size();
 
 	if (normalVector.dot(point - innerCenter) < 0)
-		normalVector *= -1;
+		normalVector *= -1;    //看法向量指内还是指外
 	return normalVector;
 }
 
