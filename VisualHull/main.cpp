@@ -73,7 +73,7 @@ public:
 	void getModel();
 	void getSurface();
 	Eigen::Vector3f getNormal(int indX, int indY, int indZ);
-
+	bool judge(int indexX, int indexY, int indexZ);
 private:
 	CoordinateInfo m_corrX;
 	CoordinateInfo m_corrY;
@@ -202,6 +202,31 @@ void Model::getModel()
 				}
 }
 
+bool Model::judge(int indexX, int indexY, int indexZ)
+{
+	// 邻域：上、下、左、右、前、后。
+	int dx[6] = { -1, 0, 0, 0, 0, 1 };
+	int dy[6] = { 0, 1, -1, 0, 0, 0 };
+	int dz[6] = { 0, 0, 0, 1, -1, 0 };
+
+	// lambda表达式，用于判断某个点是否在Voxel的范围内
+	auto outOfRange = [&](int indexX, int indexY, int indexZ) {
+		return indexX < 0 || indexY < 0 || indexZ < 0
+			|| indexX >= m_corrX.m_resolution
+			|| indexY >= m_corrY.m_resolution
+			|| indexZ >= m_corrZ.m_resolution;
+	};
+	bool ans = false;
+	double coorX = m_corrX.index2coor(indexX);
+	double coorY = m_corrY.index2coor(indexY);
+	double coorZ = m_corrZ.index2coor(indexZ);
+	for (int i = 0; i < 6; i++)
+		ans = ans || outOfRange(indexX + dx[i], indexY + dy[i], indexZ + dz[i]);
+	for (int i = 0; i < m_projectionList.size(); i++)
+		ans = ans || !m_projectionList[i].checkRange(coorX, coorY, coorZ);
+	return ans;
+}
+
 void Model::getSurface()
 {
 	// 邻域：上、下、左、右、前、后。
@@ -216,24 +241,24 @@ void Model::getSurface()
 			|| indexY >= m_corrY.m_resolution
 			|| indexZ >= m_corrZ.m_resolution;
 	};
-
-	for (int indexX = 0; indexX < m_corrX.m_resolution; indexX++)
-		for (int indexY = 0; indexY < m_corrY.m_resolution; indexY++)
-			for (int indexZ = 0; indexZ < m_corrZ.m_resolution; indexZ++)
+	bool ans = false;
+	for (int indexX = 0; indexX < m_corrX.m_resolution&&(!ans); indexX++)
+		for (int indexY = 0; indexY < m_corrY.m_resolution&&(!ans); indexY++)
+			for (int indexZ = 0; indexZ < m_corrZ.m_resolution && (!ans); indexZ++)
 			{
 				if (!m_voxel[indexX][indexY][indexZ])
 				{
 					m_surface[indexX][indexY][indexZ] = false;
 					continue;
 				}
-				bool ans = false;
+				
 				for (int i = 0; i < 6; i++)
 				{
 					ans = ans || outOfRange(indexX + dx[i], indexY + dy[i], indexZ + dz[i])
 						|| !m_voxel[indexX + dx[i]][indexY + dy[i]][indexZ + dz[i]];
 				}
 				m_surface[indexX][indexY][indexZ] = ans;
-			}
+			}//找到一个表面点立马停止循环，要从这个点开始广度优先搜索
 }
 
 Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
