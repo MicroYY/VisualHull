@@ -15,7 +15,7 @@
 // 用于判断投影是否在visual hull内部
 struct Projection
 {
-	Eigen::Matrix<float, 3, 4> m_projMat;
+	Eigen::Matrix<float, 3, 4> m_projMat;  
 	cv::Mat m_image;
 	const uint m_threshold = 125;
 
@@ -26,12 +26,13 @@ struct Projection
 
 	bool checkRange(double x, double y, double z)
 	{
-		Eigen::Vector3f vec3 = m_projMat * Eigen::Vector4f(x, y, z, 1);
+		Eigen::Vector3f vec3 = m_projMat * Eigen::Vector4f(x, y, z, 1);  //P在该相机上的投影像素坐标(u,v,1)
+
 		int indX = vec3[1] / vec3[2];
-		int indY = vec3[0] / vec3[2];
+		int indY = vec3[0] / vec3[2];    //齐次坐标三维转二维
 
 		if (outOfRange(indX, m_image.size().height) || outOfRange(indY, m_image.size().width))
-			return false;
+			return false;       //判断点有没有在轮廓(Silhouette)内部
 		return m_image.at<uchar>((uint)(vec3[1] / vec3[2]), (uint)(vec3[0] / vec3[2])) > m_threshold;
 	}
 };
