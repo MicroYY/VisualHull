@@ -114,16 +114,51 @@ void Model::saveModel(const char* pFileName)
 {
 	std::ofstream fout(pFileName);
 
-	for (int indexX = 0; indexX < m_corrX.m_resolution; indexX++)
-		for (int indexY = 0; indexY < m_corrY.m_resolution; indexY++)
-			for (int indexZ = 0; indexZ < m_corrZ.m_resolution; indexZ++)
+	bool flag = false;
+	int indexX, indexY, indexZ;
+	for (indexX = 0; indexX < m_corrX.m_resolution && (!flag); indexX++)
+		for (indexY = 0; indexY < m_corrY.m_resolution && (!flag); indexY++)
+			for (indexZ = 0; indexZ < m_corrZ.m_resolution && (!flag); indexZ++)
 				if (m_surface[indexX][indexY][indexZ])
 				{
 					double coorX = m_corrX.index2coor(indexX);//转换成空间实际坐标
 					double coorY = m_corrY.index2coor(indexY);
 					double coorZ = m_corrZ.index2coor(indexZ);
 					fout << coorX << ' ' << coorY << ' ' << coorZ << std::endl;
+					flag = true;
 				}
+	int *coor = new int[3];
+	coor[0] = indexX;
+	coor[1] = indexY;
+	coor[2] = indexZ;
+	std::queue<int *>q;
+	q.push(coor);
+	while (!q.empty())
+	{
+		indexX = q.front()[0];
+		indexY = q.front()[1];
+		indexZ = q.front()[2];
+		for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
+			for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
+				for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
+				{
+					if (!dX && !dY && !dZ)
+						continue;
+					int neiborX = indexX + dX;
+					int neiborY = indexY + dY;
+					int neiborZ = indexZ + dZ;
+					if (judgeSurface(neiborX, neiborY, neiborZ))
+					{
+						fout << m_corrX.index2coor(neiborX) << ' ' << m_corrY.index2coor(neiborY) << ' ' << m_corrZ.index2coor(neiborZ) << std::endl; 
+						coor = new int[3];
+						coor[0] = neiborX;
+						coor[1] = neiborY;
+						coor[2] = neiborZ;
+						q.push(coor);
+					}
+				}
+		q.pop();
+	}
 }
 
 void Model::saveModelWithNormal(const char* pFileName)
@@ -134,19 +169,55 @@ void Model::saveModelWithNormal(const char* pFileName)
 	double midY = m_corrY.index2coor(m_corrY.m_resolution / 2);
 	double midZ = m_corrZ.index2coor(m_corrZ.m_resolution / 2);
 
-	for (int indexX = 0; indexX < m_corrX.m_resolution; indexX++)
-		for (int indexY = 0; indexY < m_corrY.m_resolution; indexY++)
-			for (int indexZ = 0; indexZ < m_corrZ.m_resolution; indexZ++)
+	bool flag = false;
+	int indexX, indexY, indexZ;
+	for (indexX = 0; indexX < m_corrX.m_resolution && (!flag); indexX++)
+		for (indexY = 0; indexY < m_corrY.m_resolution && (!flag); indexY++)
+			for (indexZ = 0; indexZ < m_corrZ.m_resolution && (!flag); indexZ++)
 				if (m_surface[indexX][indexY][indexZ])
 				{
-					double coorX = m_corrX.index2coor(indexX);
+					double coorX = m_corrX.index2coor(indexX);//转换成空间实际坐标
 					double coorY = m_corrY.index2coor(indexY);
 					double coorZ = m_corrZ.index2coor(indexZ);
-					fout << coorX << ' ' << coorY << ' ' << coorZ << ' ';
-
+					fout << coorX << ' ' << coorY << ' ' << coorZ << std::endl;
+					flag = true;
 					Eigen::Vector3f nor = getNormal(indexX, indexY, indexZ); //只根据一个点的坐标如何求法向量？纳闷
 					fout << nor(0) << ' ' << nor(1) << ' ' << nor(2) << std::endl;
 				}
+	int *coor = new int[3];
+	coor[0] = indexX;
+	coor[1] = indexY;
+	coor[2] = indexZ;
+	std::queue<int *>q;
+	q.push(coor);
+	while (!q.empty())
+	{
+		indexX = q.front()[0];
+		indexY = q.front()[1];
+		indexZ = q.front()[2];
+		for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
+			for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
+				for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
+				{
+					if (!dX && !dY && !dZ)
+						continue;
+					int neiborX = indexX + dX;
+					int neiborY = indexY + dY;
+					int neiborZ = indexZ + dZ;
+					if (judgeSurface(neiborX, neiborY, neiborZ))
+					{
+						fout << m_corrX.index2coor(neiborX) << ' ' << m_corrY.index2coor(neiborY) << ' ' << m_corrZ.index2coor(neiborZ) << std::endl;
+						Eigen::Vector3f nor = getNormal(indexX, indexY, indexZ); //只根据一个点的坐标如何求法向量？纳闷
+						fout << nor(0) << ' ' << nor(1) << ' ' << nor(2) << std::endl;
+						coor = new int[3];
+						coor[0] = neiborX;
+						coor[1] = neiborY;
+						coor[2] = neiborZ;
+						q.push(coor);
+					}
+				}
+		q.pop();
+	}
 }
 
 // 读取相机的内外参数，不用管
@@ -202,26 +273,20 @@ void Model::getModel()
 				{
 					double coorX = m_corrX.index2coor(indexX);
 					double coorY = m_corrY.index2coor(indexY);
-					double coorZ = m_corrZ.index2coor(indexZ);    //相当于空间里一个立方体
+					double coorZ = m_corrZ.index2coor(indexZ);    
 					m_voxel[indexX][indexY][indexZ] = m_voxel[indexX][indexY][indexZ] && m_projectionList[i].checkRange(coorX, coorY, coorZ);
 				}
 }
 
-bool Model::judgeInner(int indexX, int indexY, int indexZ)
+//判断是否是里点(包括表面点)
+bool Model::judgeInner(int indexX, int indexY, int indexZ)   
 {
-	bool flag = false;
 	double coorX = m_corrX.index2coor(indexX);
 	double coorY = m_corrY.index2coor(indexY);
 	double coorZ = m_corrZ.index2coor(indexZ);
 	for (int j = 0; j < m_projectionList.size(); j++)
-		flag = flag && m_projectionList[j].checkRange(coorX, coorY, coorZ);
-	if (!flag)
-	{
-		m_voxel[indexX][indexY][indexZ] = false;
-		return false;
-	}
-	m_voxel[indexX][indexY][indexZ] = true;
-	return true;
+		m_voxel[indexX][indexY][indexZ] = m_voxel[indexX][indexY][indexZ] && m_projectionList[j].checkRange(coorX, coorY, coorZ);
+	return m_voxel[indexX][indexY][indexZ];
 }
 
 bool Model::judgeSurface(int indexX, int indexY, int indexZ)
@@ -244,7 +309,7 @@ bool Model::judgeSurface(int indexX, int indexY, int indexZ)
 			|| indexZ >= m_corrZ.m_resolution;
 	};
 	bool ans = false;
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 6&&(!ans); i++)
 	{
 		ans = ans || outOfRange(indexX + dx[i], indexY + dy[i], indexZ + dz[i]);
 		double coorX = m_corrX.index2coor(indexX + dx[i]);
@@ -259,41 +324,40 @@ bool Model::judgeSurface(int indexX, int indexY, int indexZ)
 
 void Model::BFS(int indexX, int indexY, int indexZ)
 {
-	// lambda表达式，用于判断某个点是否在Voxel的范围内
-	auto outOfRange = [&](int indexX, int indexY, int indexZ) {
-		return indexX < 0 || indexY < 0 || indexZ < 0
-			|| indexX >= m_corrX.m_resolution
-			|| indexY >= m_corrY.m_resolution
-			|| indexZ >= m_corrZ.m_resolution;
-	};
 	int *coor=new int[3];
 	coor[0] = indexX;
 	coor[1] = indexY;
 	coor[2] = indexZ;
 	std::queue<int *>q;
 	q.push(coor);
-	for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
-		for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
-			for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
-			{
-				if (!dX && !dY && !dZ)
-					continue;
-				int neiborX = indexX + dX;
-				int neiborY = indexY + dY;
-				int neiborZ = indexZ + dZ;
-				if (judgeSurface(neiborX, neiborY, neiborZ))
+	while (!q.empty())
+	{
+		indexX = q.front()[0];
+		indexY = q.front()[1];
+		indexZ = q.front()[2];
+		for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
+			for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
+				for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
 				{
-					neiborList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));  //在面上就放到面的vector里面
-					coor = new int[3];
-					coor[0] = neiborX;
-					coor[1] = neiborY;
-					coor[2] = neiborZ;
-					q.push(coor);
-				}
-				else if (judgeInner(neiborX, neiborY, neiborZ))
+					if (!dX && !dY && !dZ)
+						continue;
+					int neiborX = indexX + dX;
+					int neiborY = indexY + dY;
+					int neiborZ = indexZ + dZ;
+					if (judgeSurface(neiborX, neiborY, neiborZ))
+					{
+						neiborList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));  //在面上就放到面的vector里面
+						coor = new int[3];
+						coor[0] = neiborX;
+						coor[1] = neiborY;
+						coor[2] = neiborZ;
+						q.push(coor);
+					}
+					else if (judgeInner(neiborX, neiborY, neiborZ))
 						innerList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));   //在体里就放到体的vector里面
-				
-			}
+				}
+		q.pop();
+	}
 }
 
 void Model::getSurface()
@@ -311,9 +375,10 @@ void Model::getSurface()
 			|| indexZ >= m_corrZ.m_resolution;
 	};
 	bool ans = false;
-	for (int indexX = 0; indexX < m_corrX.m_resolution&&(!ans); indexX++)
-		for (int indexY = 0; indexY < m_corrY.m_resolution&&(!ans); indexY++)
-			for (int indexZ = 0; indexZ < m_corrZ.m_resolution && (!ans); indexZ++)
+	int indexX, indexY, indexZ;
+	for (indexX = 0; indexX < m_corrX.m_resolution&&(!ans); indexX++)
+		for (indexY = 0; indexY < m_corrY.m_resolution&&(!ans); indexY++)
+			for (indexZ = 0; indexZ < m_corrZ.m_resolution && (!ans); indexZ++)
 			{
 				if (!m_voxel[indexX][indexY][indexZ])
 				{
@@ -327,40 +392,41 @@ void Model::getSurface()
 						|| !m_voxel[indexX + dx[i]][indexY + dy[i]][indexZ + dz[i]];
 				}
 				m_surface[indexX][indexY][indexZ] = ans;
-			}//找到一个表面点立马停止循环，要从这个点开始广度优先搜索
+			}
+	BFS(indexX, indexY, indexZ);
 }
 
 Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 {
-	auto outOfRange = [&](int indexX, int indexY, int indexZ){   //判断是否超出分辨率？？
-		return indexX < 0 || indexY < 0 || indexZ < 0
-			|| indexX >= m_corrX.m_resolution
-			|| indexY >= m_corrY.m_resolution
-			|| indexZ >= m_corrZ.m_resolution;
-	};
+	//auto outOfRange = [&](int indexX, int indexY, int indexZ){   //判断是否超出分辨率？？
+	//	return indexX < 0 || indexY < 0 || indexZ < 0
+	//		|| indexX >= m_corrX.m_resolution
+	//		|| indexY >= m_corrY.m_resolution
+	//		|| indexZ >= m_corrZ.m_resolution;
+	//};
 
-	
+	//
 
-	for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
-		for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
-			for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
-			{
-				if (!dX && !dY && !dZ)
-					continue;
-				int neiborX = indX + dX;
-				int neiborY = indY + dY;
-				int neiborZ = indZ + dZ;
-				if (!outOfRange(neiborX, neiborY, neiborZ))
-				{
-					float coorX = m_corrX.index2coor(neiborX);
-					float coorY = m_corrY.index2coor(neiborY);
-					float coorZ = m_corrZ.index2coor(neiborZ);   
-					if (m_surface[neiborX][neiborY][neiborZ])
-						neiborList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));  //在面上就放到面的vector里面
-					else if (m_voxel[neiborX][neiborY][neiborZ])
-						innerList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));   //在体里就放到体的vector里面
-				}
-			}
+	//for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
+	//	for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
+	//		for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
+	//		{
+	//			if (!dX && !dY && !dZ)
+	//				continue;
+	//			int neiborX = indX + dX;
+	//			int neiborY = indY + dY;
+	//			int neiborZ = indZ + dZ;
+	//			if (!outOfRange(neiborX, neiborY, neiborZ))
+	//			{
+	//				float coorX = m_corrX.index2coor(neiborX);
+	//				float coorY = m_corrY.index2coor(neiborY);
+	//				float coorZ = m_corrZ.index2coor(neiborZ);   
+	//				if (m_surface[neiborX][neiborY][neiborZ])
+	//					neiborList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));  //在面上就放到面的vector里面
+	//				else if (m_voxel[neiborX][neiborY][neiborZ])
+	//					innerList.push_back(Eigen::Vector3f(coorX, coorY, coorZ));   //在体里就放到体的vector里面
+	//			}
+	//		}
 
 	Eigen::Vector3f point(m_corrX.index2coor(indX), m_corrY.index2coor(indY), m_corrZ.index2coor(indZ));
 
@@ -400,8 +466,8 @@ int main(int argc, char** argv)
 	model.loadImage("../../wd_segmented", "WD2_", "_00020_segmented.png");
 
 	// 得到Voxel模型
-	model.getModel();
-	std::cout << "get model done\n";
+	/*model.getModel();
+	std::cout << "get model done\n";*/
 
 	// 获得Voxel模型的表面
 	model.getSurface();
