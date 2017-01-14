@@ -73,9 +73,9 @@ public:
 	void getModel();
 	void getSurface();
 	Eigen::Vector3f getNormal(int indX, int indY, int indZ);
-	bool judgeInner(int indexX, int indexY, int indexZ);
-	bool judgeSurface(int indexX, int indexY, int indexZ);
-	void BFS(int indexX, int indexY, int indexZ);
+	bool judgeInner(int &indexX, int &indexY, int &indexZ);
+	bool judgeSurface(int &indexX, int &indexY, int &indexZ);
+	void BFS(int &indexX, int &indexY, int &indexZ);
 private:
 	CoordinateInfo m_corrX;
 	CoordinateInfo m_corrY;
@@ -279,8 +279,10 @@ void Model::getModel()
 }
 
 //判断是否是里点(包括表面点)
-bool Model::judgeInner(int indexX, int indexY, int indexZ)   
+bool Model::judgeInner(int &indexX, int &indexY, int &indexZ)   
 {
+	if (indexX < 0 || indexX >= m_corrX.m_resolution || indexY < 0 || indexY >= m_corrY.m_resolution || indexZ < 0 || indexZ >= m_corrZ.m_resolution)
+		return false;
 	double coorX = m_corrX.index2coor(indexX);
 	double coorY = m_corrY.index2coor(indexY);
 	double coorZ = m_corrZ.index2coor(indexZ);
@@ -289,8 +291,10 @@ bool Model::judgeInner(int indexX, int indexY, int indexZ)
 	return m_voxel[indexX][indexY][indexZ];
 }
 
-bool Model::judgeSurface(int indexX, int indexY, int indexZ)
+bool Model::judgeSurface(int &indexX, int &indexY, int &indexZ)
 {
+	if (indexX < 0 || indexX >= m_corrX.m_resolution || indexY < 0 || indexY >= m_corrY.m_resolution || indexZ < 0 || indexZ >= m_corrZ.m_resolution)
+		return false;
 	if (!judgeInner(indexX, indexY, indexZ))
 	{
 		m_surface[indexX][indexY][indexZ] = false;
@@ -322,8 +326,19 @@ bool Model::judgeSurface(int indexX, int indexY, int indexZ)
 	return ans;
 }
 
-void Model::BFS(int indexX, int indexY, int indexZ)
+void Model::BFS(int &indexX, int &indexY, int &indexZ)
 {
+	bool ***checked = new bool**[m_corrX.m_resolution];
+	for (int i = 0; i < m_corrX.m_resolution; i++)
+	{
+		checked[i] = new bool *[m_corrY.m_resolution];
+		for (int j = 0; j < m_corrY.m_resolution; j++)
+		{
+			checked[i][j] = new bool[m_corrY.m_resolution];
+			for (int k = 0; k < m_corrZ.m_resolution; k++)
+				checked[i][j][k] = false;
+		}
+	}
 	int *coor=new int[3];
 	coor[0] = indexX;
 	coor[1] = indexY;
@@ -344,17 +359,21 @@ void Model::BFS(int indexX, int indexY, int indexZ)
 					int neiborX = indexX + dX;
 					int neiborY = indexY + dY;
 					int neiborZ = indexZ + dZ;
-					if (judgeSurface(neiborX, neiborY, neiborZ))
+					if (!checked[neiborX][neiborY][neiborZ])
 					{
-						neiborList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));  //在面上就放到面的vector里面
-						coor = new int[3];
-						coor[0] = neiborX;
-						coor[1] = neiborY;
-						coor[2] = neiborZ;
-						q.push(coor);
+						if (judgeSurface(neiborX, neiborY, neiborZ))
+						{
+							neiborList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));  //在面上就放到面的vector里面
+							coor = new int[3];
+							coor[0] = neiborX;
+							coor[1] = neiborY;
+							coor[2] = neiborZ;
+							q.push(coor);
+						}
+						else if (judgeInner(neiborX, neiborY, neiborZ))
+							innerList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));   //在体里就放到体的vector里面
+						checked[neiborX][neiborY][neiborZ] = true;
 					}
-					else if (judgeInner(neiborX, neiborY, neiborZ))
-						innerList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));   //在体里就放到体的vector里面
 				}
 		q.pop();
 	}
@@ -376,11 +395,11 @@ void Model::getSurface()
 	};
 	bool ans = false;
 	int indexX, indexY, indexZ;
-	for (indexX = 0; indexX < m_corrX.m_resolution&&(!ans); indexX++)
-		for (indexY = 0; indexY < m_corrY.m_resolution&&(!ans); indexY++)
-			for (indexZ = 0; indexZ < m_corrZ.m_resolution && (!ans); indexZ++)
+	for (indexX = m_corrX.m_resolution/2; indexX < m_corrX.m_resolution&&(!ans); indexX++)
+		for (indexY = m_corrY.m_resolution/2; indexY < m_corrY.m_resolution&&(!ans); indexY++)
+			for (indexZ = m_corrZ.m_resolution/2; indexZ < m_corrZ.m_resolution && (!ans); indexZ++)
 			{
-				if (!m_voxel[indexX][indexY][indexZ])
+				if (!judgeInner(indexX,indexY,indexZ))
 				{
 					m_surface[indexX][indexY][indexZ] = false;
 					continue;
