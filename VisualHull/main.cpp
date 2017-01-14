@@ -10,7 +10,7 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Eigen>
 #include <limits>
-#include <cmath>   //假装更改 //再改一下
+#include <queue>
 
 // 用于判断投影是否在visual hull内部
 struct Projection
@@ -73,11 +73,16 @@ public:
 	void getModel();
 	void getSurface();
 	Eigen::Vector3f getNormal(int indX, int indY, int indZ);
-	bool judge(int indexX, int indexY, int indexZ);
+	bool judgeInner(int indexX, int indexY, int indexZ);
+	bool judgeSurface(int indexX, int indexY, int indexZ);
+	void BFS(int indexX, int indexY, int indexZ);
 private:
 	CoordinateInfo m_corrX;
 	CoordinateInfo m_corrY;
 	CoordinateInfo m_corrZ;
+
+	std::vector<Eigen::Vector3f> neiborList;   //getnormal和BFS专用
+	std::vector<Eigen::Vector3f> innerList;
 
 	int m_neiborSize;
 
@@ -202,8 +207,30 @@ void Model::getModel()
 				}
 }
 
-bool Model::judge(int indexX, int indexY, int indexZ)
+bool Model::judgeInner(int indexX, int indexY, int indexZ)
 {
+	bool flag = false;
+	double coorX = m_corrX.index2coor(indexX);
+	double coorY = m_corrY.index2coor(indexY);
+	double coorZ = m_corrZ.index2coor(indexZ);
+	for (int j = 0; j < m_projectionList.size(); j++)
+		flag = flag && m_projectionList[j].checkRange(coorX, coorY, coorZ);
+	if (!flag)
+	{
+		m_voxel[indexX][indexY][indexZ] = false;
+		return false;
+	}
+	m_voxel[indexX][indexY][indexZ] = true;
+	return true;
+}
+
+bool Model::judgeSurface(int indexX, int indexY, int indexZ)
+{
+	if (!judgeInner(indexX, indexY, indexZ))
+	{
+		m_surface[indexX][indexY][indexZ] = false;
+		return false;
+	}
 	// 邻域：上、下、左、右、前、后。
 	int dx[6] = { -1, 0, 0, 0, 0, 1 };
 	int dy[6] = { 0, 1, -1, 0, 0, 0 };
@@ -217,14 +244,56 @@ bool Model::judge(int indexX, int indexY, int indexZ)
 			|| indexZ >= m_corrZ.m_resolution;
 	};
 	bool ans = false;
-	double coorX = m_corrX.index2coor(indexX);
-	double coorY = m_corrY.index2coor(indexY);
-	double coorZ = m_corrZ.index2coor(indexZ);
 	for (int i = 0; i < 6; i++)
+	{
 		ans = ans || outOfRange(indexX + dx[i], indexY + dy[i], indexZ + dz[i]);
-	for (int i = 0; i < m_projectionList.size(); i++)
-		ans = ans || !m_projectionList[i].checkRange(coorX, coorY, coorZ);
+		double coorX = m_corrX.index2coor(indexX + dx[i]);
+		double coorY = m_corrY.index2coor(indexY + dy[i]);
+		double coorZ = m_corrZ.index2coor(indexZ + dz[i]);
+		for (int j = 0; j < m_projectionList.size(); j++)
+			ans = ans || !m_projectionList[j].checkRange(coorX, coorY, coorZ);
+	}
+	m_surface[indexX][indexY][indexZ] = ans;
 	return ans;
+}
+
+void Model::BFS(int indexX, int indexY, int indexZ)
+{
+	// lambda表达式，用于判断某个点是否在Voxel的范围内
+	auto outOfRange = [&](int indexX, int indexY, int indexZ) {
+		return indexX < 0 || indexY < 0 || indexZ < 0
+			|| indexX >= m_corrX.m_resolution
+			|| indexY >= m_corrY.m_resolution
+			|| indexZ >= m_corrZ.m_resolution;
+	};
+	int *coor=new int[3];
+	coor[0] = indexX;
+	coor[1] = indexY;
+	coor[2] = indexZ;
+	std::queue<int *>q;
+	q.push(coor);
+	for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
+		for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
+			for (int dZ = -m_neiborSize; dZ <= m_neiborSize; dZ++)
+			{
+				if (!dX && !dY && !dZ)
+					continue;
+				int neiborX = indexX + dX;
+				int neiborY = indexY + dY;
+				int neiborZ = indexZ + dZ;
+				if (judgeSurface(neiborX, neiborY, neiborZ))
+				{
+					neiborList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));  //在面上就放到面的vector里面
+					coor = new int[3];
+					coor[0] = neiborX;
+					coor[1] = neiborY;
+					coor[2] = neiborZ;
+					q.push(coor);
+				}
+				else if (judgeInner(neiborX, neiborY, neiborZ))
+						innerList.push_back(Eigen::Vector3f(m_corrX.index2coor(neiborX), m_corrY.index2coor(neiborY), m_corrZ.index2coor(neiborZ)));   //在体里就放到体的vector里面
+				
+			}
 }
 
 void Model::getSurface()
@@ -270,8 +339,7 @@ Eigen::Vector3f Model::getNormal(int indX, int indY, int indZ)
 			|| indexZ >= m_corrZ.m_resolution;
 	};
 
-	std::vector<Eigen::Vector3f> neiborList;    
-	std::vector<Eigen::Vector3f> innerList;
+	
 
 	for (int dX = -m_neiborSize; dX <= m_neiborSize; dX++)
 		for (int dY = -m_neiborSize; dY <= m_neiborSize; dY++)
