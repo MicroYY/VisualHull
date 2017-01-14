@@ -101,7 +101,7 @@ Model::Model(int resX, int resY, int resZ)
 		m_neiborSize = resX / 100;
 	else
 		m_neiborSize = 1;
-	m_voxel = Voxel(m_corrX.m_resolution, Pixel(m_corrY.m_resolution, std::vector<bool>(m_corrZ.m_resolution, true)));
+	m_voxel = Voxel(m_corrX.m_resolution, Pixel(m_corrY.m_resolution, std::vector<bool>(m_corrZ.m_resolution, false)));
 	//不是很懂这个体素的生成方式
 	m_surface = m_voxel;
 }
